@@ -3,9 +3,11 @@ export interface Env {
   KV?: KVNamespace;
   JOBS: Queue;
   ASSETS: Fetcher;
+  AI: Ai;
   CORS_ORIGIN?: string;
   APP_BASE_URL?: string;
-  KIMI_API_KEY: string;
+  // 外部LLMはフォールバック用（主モデルは Workers AI）
+  KIMI_API_KEY?: string;
   OPENAI_API_KEY?: string;
   ADMIN_SECRET: string;
 }

@@ -1,5 +1,8 @@
 /**
- * AI Analyzer — Kimi K2.5 APIで補助金情報を解析
+ * AI Analyzer — 補助金情報を解析
+ *
+ * 主モデル: Cloudflare Workers AI (Qwen3 30B)。外部APIキー不要。
+ * フォールバック: Kimi K2.5 → GPT-4o-mini（Workers AI失敗時のみ）。
  */
 import { TARA_PROFILE } from "./tara-profile";
 import { parseJsonFromText } from "./json-parser";
@@ -31,6 +34,9 @@ const analysisSchema = z.object({
 });
 
 const KIMI_BASE_URL = "https://api.moonshot.ai/v1";
+
+// 主モデル: Workers AI（速度・日本語品質・コストで比較検証の結果採用）
+const WORKERS_AI_MODEL = "@cf/qwen/qwen3-30b-a3b-fp8";
 
 const SYSTEM_PROMPT = `あなたは地方自治体向けの補助金アナリストです。
 与えられた補助金・公募情報を分析し、指定されたJSON形式で結果を返してください。
@@ -223,9 +229,71 @@ async function callLlm(
   return null;
 }
 
+/** Workers AI でJSON解析（response_format=json_object でJSON強制） */
+async function callWorkersAi(
+  ai: Ai,
+  systemPrompt: string,
+  userMessage: string,
+  grant: GrantForAnalysis
+): Promise<AnalysisResult | null> {
+  const MAX_RETRIES = 2;
+  const label = `workers-ai:${WORKERS_AI_MODEL}`;
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const resp = (await ai.run(WORKERS_AI_MODEL as any, {
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        max_tokens: 2000,
+        response_format: { type: "json_object" },
+      } as any)) as { response?: unknown };
+
+      // response は文字列 or 既にパース済みオブジェクトのことがある
+      const raw = resp?.response;
+      const text =
+        typeof raw === "string" ? raw : raw != null ? JSON.stringify(raw) : "";
+
+      const parsed = parseJsonFromText(text);
+      if (!parsed) {
+        logEvent("warn", "analyzer.no_json", { provider: label, title: grant.title });
+        return null;
+      }
+
+      const validated = analysisSchema.safeParse(parsed);
+      if (!validated.success) {
+        logEvent("warn", "analyzer.validation_failed", {
+          provider: label,
+          title: grant.title,
+          errors: validated.error.issues.map((i) => `${i.path}: ${i.message}`).join("; "),
+        });
+        return null;
+      }
+
+      return validated.data as AnalysisResult;
+    } catch (err) {
+      logEvent("error", "analyzer.exception", {
+        provider: label,
+        title: grant.title,
+        attempt,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      if (attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, 1000 * 2 ** attempt));
+        continue;
+      }
+      return null;
+    }
+  }
+
+  return null;
+}
+
 export async function analyzeGrant(
   grant: GrantForAnalysis,
-  apiKey: string,
+  ai: Ai,
+  kimiApiKey?: string,
   openaiApiKey?: string
 ): Promise<AnalysisResult | null> {
   const userMessage = `以下の補助金・公募情報を分析し、結果をJSONで返してください。
@@ -246,22 +314,28 @@ ${grant.source_url}
 ${grant.raw_text || "（本文なし — タイトルと省庁から推定してください）"}
 `;
 
-  // Primary: Kimi K2.5
-  const kimiResult = await callLlm(
-    {
-      baseUrl: KIMI_BASE_URL,
-      apiKey,
-      model: "kimi-k2.5",
-      thinkingParam: { type: "disabled" },
-    },
-    SYSTEM_PROMPT,
-    userMessage,
-    grant
-  );
+  // Primary: Workers AI (Qwen3 30B)
+  const waiResult = await callWorkersAi(ai, SYSTEM_PROMPT, userMessage, grant);
+  if (waiResult) return waiResult;
 
-  if (kimiResult) return kimiResult;
+  // Fallback 1: Kimi K2.5
+  if (kimiApiKey) {
+    logEvent("info", "analyzer.fallback_to_kimi", { title: grant.title });
+    const kimiResult = await callLlm(
+      {
+        baseUrl: KIMI_BASE_URL,
+        apiKey: kimiApiKey,
+        model: "kimi-k2.5",
+        thinkingParam: { type: "disabled" },
+      },
+      SYSTEM_PROMPT,
+      userMessage,
+      grant
+    );
+    if (kimiResult) return kimiResult;
+  }
 
-  // Fallback: GPT-4o-mini
+  // Fallback 2: GPT-4o-mini
   if (openaiApiKey) {
     logEvent("info", "analyzer.fallback_to_openai", { title: grant.title });
     return callLlm(

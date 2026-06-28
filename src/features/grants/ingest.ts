@@ -191,6 +191,7 @@ export async function handleAnalyze(
       deadline: grant.deadline,
       raw_text: grant.rawText,
     },
+    env.AI,
     env.KIMI_API_KEY,
     env.OPENAI_API_KEY
   );

@@ -11,6 +11,10 @@
       "migrations_dir": "./migrations"
     }
   ],
+  // Workers AI — 補助金のAI解析（主モデル: Qwen3 30B）。外部APIはフォールバック
+  "ai": {
+    "binding": "AI"
+  },
   // Cron Triggers — 毎日21:00 UTC (= JST 06:00) に補助金一覧取得
   "triggers": {
     "crons": ["0 21 * * *"]
