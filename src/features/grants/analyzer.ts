@@ -364,9 +364,8 @@ async function callJev(
   }
 
   // 2. HTTP TypeSafe API (TYPESAFE_API_KEY)
-  const typesafeKey =
-    env.TYPESAFE_API_KEY ||
-    (typeof process !== "undefined" ? process.env?.TYPESAFE_API_KEY : undefined);
+  const globalEnv = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env;
+  const typesafeKey = env.TYPESAFE_API_KEY || globalEnv?.TYPESAFE_API_KEY;
 
   if (typesafeKey) {
     try {
