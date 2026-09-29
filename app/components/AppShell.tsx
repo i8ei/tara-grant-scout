@@ -67,8 +67,8 @@ export function AppShell({
         {aboutOpen && (
           <div className="mx-auto mt-3 max-w-lg text-left text-xs leading-relaxed text-gray-500">
             <p>
-              全省庁の補助金情報をjGrants APIから毎日自動取得し、AIが太良町との相性を判定するシステムです。
-              ランクA（直接活用可能）・B（間接的に活用可能）の補助金を一覧表示しています。
+              国（デジタル庁jGrants）および佐賀県の補助金情報を毎日自動取得し、AIが太良町との相性を判定するシステムです。
+              太良町の事業者や役場が活用できる制度をS・A・Bランクで一覧表示しています。
             </p>
             <p className="mt-2">
               データは毎朝自動更新されます。掲載情報はAIによる判定のため、正確性は公式サイトでご確認ください。

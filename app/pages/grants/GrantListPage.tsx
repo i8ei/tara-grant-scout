@@ -151,7 +151,7 @@ export function GrantListPage() {
           補助金スカウト <span className="text-lg font-normal text-gray-400">@太良</span> <span className="text-base font-normal text-gray-400">— </span><span className="text-indigo-600">{grants.length}</span><span className="text-base font-normal text-gray-400">件</span>
         </h1>
         <p className="text-sm text-gray-500">
-          全省庁の補助金からAIが太良町に使えそうなものを自動ピックアップ
+          国・省庁・佐賀県の補助金からAIが太良町で使える制度を自動ピックアップ
         </p>
       </div>
 
