@@ -8,6 +8,7 @@ import { drizzle, type DrizzleD1Database } from "drizzle-orm/d1";
 import { eq, sql, isNull } from "drizzle-orm";
 import { grants, grantAiAnalyses, systemMeta } from "../../db/schema";
 import { fetchGrantList, enrichGrantDetail, type RawGrant } from "./jgrants-source";
+import { fetchSagaperchGrantList } from "./sagaperch-source";
 import { analyzeGrant } from "./analyzer";
 import { logEvent } from "../../lib/logging";
 import type { Env } from "../../types";
@@ -20,7 +21,20 @@ export async function ingestGrantList(env: Env): Promise<{
   queued: number;
 }> {
   const db = drizzle(env.DB);
-  const rawGrants = await fetchGrantList();
+
+  // 1. jGrants (国公募) と 2. 佐賀県産業イノベーションセンター (県独自公募) を並列取得
+  const [jgrantsList, sagaperchList] = await Promise.all([
+    fetchGrantList().catch((err) => {
+      logEvent("warn", "ingest.jgrants_failed", { error: String(err) });
+      return [];
+    }),
+    fetchSagaperchGrantList().catch((err) => {
+      logEvent("warn", "ingest.sagaperch_failed", { error: String(err) });
+      return [];
+    }),
+  ]);
+
+  const rawGrants: RawGrant[] = [...sagaperchList, ...jgrantsList];
 
   if (rawGrants.length === 0) {
     logEvent("warn", "ingest.empty_result", {
@@ -43,7 +57,7 @@ export async function ingestGrantList(env: Env): Promise<{
     // INSERT ... ON CONFLICT DO NOTHING でアトミックに重複チェック
     const result = await db.run(
       sql`INSERT INTO grants (title, source_ministry, source_url, published_at, deadline, raw_text, category_raw)
-          VALUES (${g.title}, ${g.source_ministry}, ${g.source_url}, ${g.published_at}, ${g.deadline}, NULL, ${g.category_raw})
+          VALUES (${g.title}, ${g.source_ministry}, ${g.source_url}, ${g.published_at}, ${g.deadline}, ${g.raw_text || null}, ${g.category_raw})
           ON CONFLICT (source_url) DO NOTHING`
     );
 
@@ -59,10 +73,19 @@ export async function ingestGrantList(env: Env): Promise<{
       .where(eq(grants.sourceUrl, g.source_url));
 
     if (inserted) {
-      queueMessages.push({
-        type: "grant.fetch_detail",
-        payload: { grantId: inserted.id, jgrantsId: g.jgrants_id },
-      });
+      if (g.raw_text) {
+        // すでに本文がある場合（県独自クローラー等）は直接AI解析へ
+        queueMessages.push({
+          type: "grant.analyze",
+          payload: { grantId: inserted.id },
+        });
+      } else {
+        // 詳細取得が必要な場合（jGrants等）
+        queueMessages.push({
+          type: "grant.fetch_detail",
+          payload: { grantId: inserted.id, jgrantsId: g.jgrants_id },
+        });
+      }
       queued++;
     }
 
