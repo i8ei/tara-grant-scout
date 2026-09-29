@@ -51,9 +51,9 @@ const CHECK_SYSTEM_PROMPT = `あなたは佐賀県太良町（たらちょう）
 }`;
 
 const WORKERS_AI_MODELS = [
-  "@cf/qwen/qwen3.8-27b",
-  "@cf/deepseek-ai/deepseek-v4-flash-0731",
+  "@cf/meta/llama-3.1-8b-instruct-fp8",
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
+  "@cf/qwen/qwen2.5-coder-32b-instruct",
 ] as const;
 
 export async function checkGrantEligibility(
@@ -90,7 +90,6 @@ ${truncatedRaw ? `公募要領抜粋:\n${truncatedRaw}\n` : ""}
             { role: "user", content: userMessage },
           ],
           max_tokens: 1000,
-          response_format: { type: "json_object" },
         });
 
         let rawText = "";
