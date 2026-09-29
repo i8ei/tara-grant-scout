@@ -3,7 +3,7 @@ import { analysisSchema, analyzeGrant } from "../src/features/grants/analyzer";
 import type { Env, WorkersAiBinding } from "../src/types";
 
 describe("analysisSchema", () => {
-  it("should validate and map rank A when score is >= 75", () => {
+  it("should validate and map rank S when score is >= 80", () => {
     const raw = {
       summary_short: "【対象】農家 【使途】省エネ機器 【補助】上限500万円 【アクション】申請書提出",
       support_type: "補助金",
@@ -15,7 +15,7 @@ describe("analysisSchema", () => {
       notes: null,
       ai_confidence: 90,
       tara_fit_score: 85,
-      tara_fit_rank: "B", // score is 85, should be adjusted to A
+      tara_fit_rank: "B", // score is 85, should be adjusted to S
       tara_fit_reason: "太良町のみかん農家に直結する支援",
       suggested_department: "農林水産課",
       suggested_department_reason: "農業振興事業のため",
@@ -26,12 +26,12 @@ describe("analysisSchema", () => {
     const parsed = analysisSchema.safeParse(raw);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
-      expect(parsed.data.tara_fit_rank).toBe("A");
+      expect(parsed.data.tara_fit_rank).toBe("S");
       expect(parsed.data.tara_fit_score).toBe(85);
     }
   });
 
-  it("should map rank B when score is 50-74", () => {
+  it("should map rank A when score is 60-79", () => {
     const raw = {
       summary_short: "【対象】中小企業 【使途】DX 【補助】上限100万円 【アクション】Web申請",
       support_type: "補助金",
@@ -42,8 +42,8 @@ describe("analysisSchema", () => {
       required_documents: null,
       notes: null,
       ai_confidence: 80,
-      tara_fit_score: 60,
-      tara_fit_rank: "A", // score is 60, should be adjusted to B
+      tara_fit_score: 65,
+      tara_fit_rank: "C", // score is 65, should be adjusted to A
       tara_fit_reason: "汎用的なIT導入補助",
       suggested_department: "企画商工課",
       suggested_department_reason: "商工振興のため",
@@ -54,8 +54,36 @@ describe("analysisSchema", () => {
     const parsed = analysisSchema.safeParse(raw);
     expect(parsed.success).toBe(true);
     if (parsed.success) {
+      expect(parsed.data.tara_fit_rank).toBe("A");
+      expect(parsed.data.tara_fit_score).toBe(65);
+    }
+  });
+
+  it("should map rank B when score is 45-59", () => {
+    const raw = {
+      summary_short: "【対象】中小企業 【使途】省エネ 【補助】上限50万円 【アクション】申請",
+      support_type: "補助金",
+      target_entities: "小規模事業者",
+      max_amount: "50万円",
+      subsidy_rate: "1/2",
+      eligible_themes: "環境",
+      required_documents: null,
+      notes: null,
+      ai_confidence: 75,
+      tara_fit_score: 50,
+      tara_fit_rank: "A", // score is 50, should be adjusted to B
+      tara_fit_reason: "省エネ改修支援",
+      suggested_department: "環境水道課",
+      suggested_department_reason: "環境衛生のため",
+      tara_use_case: "店舗のLED化",
+      tara_categories: ["環境・エネルギー"],
+    };
+
+    const parsed = analysisSchema.safeParse(raw);
+    expect(parsed.success).toBe(true);
+    if (parsed.success) {
       expect(parsed.data.tara_fit_rank).toBe("B");
-      expect(parsed.data.tara_fit_score).toBe(60);
+      expect(parsed.data.tara_fit_score).toBe(50);
     }
   });
 
@@ -136,7 +164,7 @@ describe("analyzeGrant with Jev + Workers AI two-stage pipeline", () => {
 
     expect(mockAi.run).toHaveBeenCalledTimes(2);
     expect(result).not.toBeNull();
-    expect(result?.tara_fit_rank).toBe("A");
+    expect(result?.tara_fit_rank).toBe("S");
     expect(result?.suggested_department).toBe("農林水産課");
     expect(result?.summary_short).toContain("【誰が】");
   });

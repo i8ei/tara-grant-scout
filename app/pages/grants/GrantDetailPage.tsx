@@ -4,10 +4,12 @@ import { useGrant } from "../../hooks/useGrants";
 
 function rankColor(rank: string | null) {
   switch (rank) {
+    case "S":
+      return "bg-gradient-to-br from-amber-400 to-amber-500 text-white border-amber-500 shadow-sm font-black";
     case "A":
-      return "bg-emerald-100 text-emerald-800 border-emerald-300";
+      return "bg-emerald-100 text-emerald-800 border-emerald-300 font-bold";
     case "B":
-      return "bg-amber-100 text-amber-800 border-amber-300";
+      return "bg-sky-100 text-sky-800 border-sky-300 font-semibold";
     case "C":
       return "bg-gray-100 text-gray-500 border-gray-300";
     default:

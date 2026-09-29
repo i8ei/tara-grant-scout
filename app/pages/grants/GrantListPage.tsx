@@ -17,10 +17,12 @@ const CATEGORIES = [
 
 function rankBadge(rank: string | null) {
   switch (rank) {
+    case "S":
+      return "bg-gradient-to-br from-amber-400 to-amber-500 text-white border-amber-500 font-black shadow-xs";
     case "A":
-      return "bg-emerald-100 text-emerald-800 border-emerald-300";
+      return "bg-emerald-100 text-emerald-800 border-emerald-300 font-bold";
     case "B":
-      return "bg-amber-100 text-amber-800 border-amber-300";
+      return "bg-sky-100 text-sky-800 border-sky-300 font-semibold";
     case "C":
       return "bg-gray-100 text-gray-500 border-gray-300";
     default:
@@ -30,10 +32,12 @@ function rankBadge(rank: string | null) {
 
 function rankRowBorder(rank: string | null) {
   switch (rank) {
+    case "S":
+      return "border-l-amber-500";
     case "A":
       return "border-l-emerald-500";
     case "B":
-      return "border-l-amber-500";
+      return "border-l-sky-500";
     default:
       return "border-l-transparent";
   }
@@ -108,11 +112,11 @@ export function GrantListPage() {
   });
 
   const sorted = useMemo(() => {
-    const rankOrder: Record<string, number> = { A: 0, B: 1, C: 2 };
+    const rankOrder: Record<string, number> = { S: 0, A: 1, B: 2, C: 3 };
     return [...grants].sort((a, b) => {
       if (sortBy === "rank") {
-        const ra = rankOrder[a.taraFitRank ?? "C"] ?? 3;
-        const rb = rankOrder[b.taraFitRank ?? "C"] ?? 3;
+        const ra = rankOrder[a.taraFitRank ?? "C"] ?? 4;
+        const rb = rankOrder[b.taraFitRank ?? "C"] ?? 4;
         if (ra !== rb) return ra - rb;
         return (b.taraFitScore ?? 0) - (a.taraFitScore ?? 0);
       }
@@ -220,9 +224,10 @@ export function GrantListPage() {
                 <div className="absolute right-0 top-7 z-50 w-64 rounded-lg border border-gray-200 bg-white p-3 text-xs leading-relaxed text-gray-600 shadow-lg">
                   <p className="mb-2 font-semibold text-gray-800">AIランクの基準</p>
                   <div className="space-y-1.5">
-                    <p><span className="inline-flex h-5 w-5 items-center justify-center rounded bg-emerald-100 text-[10px] font-bold text-emerald-800">A</span> 太良町が直接活用できる可能性が高い</p>
-                    <p><span className="inline-flex h-5 w-5 items-center justify-center rounded bg-amber-100 text-[10px] font-bold text-amber-800">B</span> 間接的に活用できる・条件付きで該当</p>
-                    <p><span className="inline-flex h-5 w-5 items-center justify-center rounded bg-gray-100 text-[10px] font-bold text-gray-500">C</span> 太良町との関連性が低い（非表示）</p>
+                    <p><span className="inline-flex h-5 w-5 items-center justify-center rounded bg-gradient-to-br from-amber-400 to-amber-500 text-[10px] font-black text-white">S</span> 【超特選】太良町基幹産業に直結（80点〜）</p>
+                    <p><span className="inline-flex h-5 w-5 items-center justify-center rounded bg-emerald-100 text-[10px] font-bold text-emerald-800">A</span> 【積極推奨】町内事業者の本命制度（60〜79点）</p>
+                    <p><span className="inline-flex h-5 w-5 items-center justify-center rounded bg-sky-100 text-[10px] font-bold text-sky-800">B</span> 【条件付き】共同申請・要件次第で検討（45〜59点）</p>
+                    <p><span className="inline-flex h-5 w-5 items-center justify-center rounded bg-gray-100 text-[10px] font-bold text-gray-500">C</span> 太良町には不適・対象外（44点以下）</p>
                   </div>
                   <p className="mt-2 text-[10px] text-gray-400">スコアはAIが総合的に判定した太良町への適合度（0〜100）</p>
                 </div>

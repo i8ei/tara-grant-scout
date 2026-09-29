@@ -10,7 +10,7 @@ import type { Env, WorkersAiBinding } from "../../types";
 const FETCH_TIMEOUT_MS = 30_000;
 const MAX_RAW_TEXT_LENGTH = 8_000;
 
-const VALID_RANKS = ["A", "B", "C"] as const;
+const VALID_RANKS = ["S", "A", "B", "C"] as const;
 
 export const analysisSchema = z.object({
   summary_short: z.string().default(""),
@@ -34,9 +34,11 @@ export const analysisSchema = z.object({
 }).transform((data) => {
   // スコアとランクの整合性を担保
   let rank = data.tara_fit_rank;
-  if (data.tara_fit_score >= 75) {
+  if (data.tara_fit_score >= 80) {
+    rank = "S";
+  } else if (data.tara_fit_score >= 60) {
     rank = "A";
-  } else if (data.tara_fit_score >= 50) {
+  } else if (data.tara_fit_score >= 45) {
     rank = "B";
   } else {
     rank = "C";
@@ -83,9 +85,10 @@ ${TARA_PROFILE}
    - 0〜9点: 産学官連携の複雑なコンソーシアム必須、高度な研究開発要件などハードルが極めて高い
 
 ## ランク判定（tara_fit_rank）
-- A (75〜100点): 太良町・町民が直ちに応募・周知を検討すべき有望補助金
-- B (50〜74点): 条件付き・間接的に活用余地がある補助金
-- C (0〜49点): 太良町との関連性が薄い、または申請が現実的でない補助金
+- S (80〜100点): 太良町の基幹産業（みかん・水産・温泉観光等）に直結する超目玉・特選補助金
+- A (60〜79点): 太良町の事業者や役場が現実的に活用すべき有力・積極推奨補助金
+- B (45〜59点): 条件付き・間接的に活用余地がある検討補助金
+- C (0〜44点): 太良町との関連性が薄い、または申請が現実的でない補助金
 
 ## AI要約フォーマット（summary_short）
 事業者が5秒で応募可否を判断できるよう、以下の4要素を含めた簡潔で具体的な構造化サマリー（120〜180文字程度）を作成してください:
@@ -109,7 +112,7 @@ ${TARA_PROFILE}
   "notes": "その他注意点。なければ null",
   "ai_confidence": 0〜100の整数,
   "tara_fit_score": 0〜100の整数,
-  "tara_fit_rank": "A | B | C",
+  "tara_fit_rank": "S | A | B | C",
   "tara_fit_reason": "4軸評価に基づく適合理由の解説（2〜3文）",
   "suggested_department": "太良町役場で主担当になりそうな課",
   "suggested_department_reason": "その課を推定した理由（1〜2文）",
@@ -728,9 +731,9 @@ URL: ${grant.source_url}
       };
     }
 
-    // 適合案件（A/Bランク候補）: スコア計算 (0〜100)
+    // 適合案件（S/A/B/Cランク候補）: スコア計算 (0〜100)
     const fitScore = Math.min(100, Math.max(0, Math.round((isRealisticNoul * 0.6 + normalizedScale * 0.4) * 100)));
-    const fitRank = fitScore >= 75 ? "A" : fitScore >= 50 ? "B" : "C";
+    const fitRank = fitScore >= 80 ? "S" : fitScore >= 60 ? "A" : fitScore >= 45 ? "B" : "C";
 
     // ── 第2段階: 生成LLMで「5秒要約」と「活用仮説」を生成 ──
     const userMessage = `以下の補助金・公募情報から、指定のJSON形式で要約と制度詳細を抽出してください。
