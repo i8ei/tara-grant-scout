@@ -159,7 +159,7 @@ export async function handleFetchDetail(
 /** Queue consumer: AI解析ジョブ */
 export async function handleAnalyze(
   env: Env,
-  payload: { grantId: number }
+  payload: { grantId: number; force?: boolean }
 ): Promise<void> {
   const db = drizzle(env.DB);
   const [grant] = await db
@@ -172,13 +172,13 @@ export async function handleAnalyze(
     return;
   }
 
-  // 既に解析済みならスキップ
+  // 既に解析済みならスキップ（force: true の場合は上書き再解析）
   const [existingAnalysis] = await db
     .select({ id: grantAiAnalyses.id })
     .from(grantAiAnalyses)
     .where(eq(grantAiAnalyses.grantId, payload.grantId));
 
-  if (existingAnalysis) {
+  if (existingAnalysis && !payload.force) {
     logEvent("info", "job.analyze.already_done", { grantId: payload.grantId });
     return;
   }
@@ -203,30 +203,58 @@ export async function handleAnalyze(
     ? analysis.tara_categories.join(",")
     : analysis.tara_categories ?? null;
 
-  await db.insert(grantAiAnalyses).values({
-    grantId: payload.grantId,
-    summaryShort: analysis.summary_short,
-    supportType: analysis.support_type,
-    targetEntities: analysis.target_entities,
-    maxAmount: analysis.max_amount,
-    subsidyRate: analysis.subsidy_rate,
-    eligibleThemes: analysis.eligible_themes,
-    requiredDocuments: analysis.required_documents,
-    notes: analysis.notes,
-    aiConfidence: analysis.ai_confidence,
-    taraFitRank: analysis.tara_fit_rank,
-    taraFitScore: analysis.tara_fit_score,
-    taraFitReason: analysis.tara_fit_reason,
-    suggestedDepartment: analysis.suggested_department,
-    suggestedDepartmentReason: analysis.suggested_department_reason,
-    taraUseCase: analysis.tara_use_case,
-    taraCategories: categories,
-  }).onConflictDoNothing();
+  const nowIso = new Date().toISOString();
+
+  if (existingAnalysis) {
+    await db
+      .update(grantAiAnalyses)
+      .set({
+        summaryShort: analysis.summary_short,
+        supportType: analysis.support_type,
+        targetEntities: analysis.target_entities,
+        maxAmount: analysis.max_amount,
+        subsidyRate: analysis.subsidy_rate,
+        eligibleThemes: analysis.eligible_themes,
+        requiredDocuments: analysis.required_documents,
+        notes: analysis.notes,
+        aiConfidence: analysis.ai_confidence,
+        taraFitRank: analysis.tara_fit_rank,
+        taraFitScore: analysis.tara_fit_score,
+        taraFitReason: analysis.tara_fit_reason,
+        suggestedDepartment: analysis.suggested_department,
+        suggestedDepartmentReason: analysis.suggested_department_reason,
+        taraUseCase: analysis.tara_use_case,
+        taraCategories: categories,
+        updatedAt: nowIso,
+      })
+      .where(eq(grantAiAnalyses.id, existingAnalysis.id));
+  } else {
+    await db.insert(grantAiAnalyses).values({
+      grantId: payload.grantId,
+      summaryShort: analysis.summary_short,
+      supportType: analysis.support_type,
+      targetEntities: analysis.target_entities,
+      maxAmount: analysis.max_amount,
+      subsidyRate: analysis.subsidy_rate,
+      eligibleThemes: analysis.eligible_themes,
+      requiredDocuments: analysis.required_documents,
+      notes: analysis.notes,
+      aiConfidence: analysis.ai_confidence,
+      taraFitRank: analysis.tara_fit_rank,
+      taraFitScore: analysis.tara_fit_score,
+      taraFitReason: analysis.tara_fit_reason,
+      suggestedDepartment: analysis.suggested_department,
+      suggestedDepartmentReason: analysis.suggested_department_reason,
+      taraUseCase: analysis.tara_use_case,
+      taraCategories: categories,
+    }).onConflictDoNothing();
+  }
 
   logEvent("info", "job.analyze.done", {
     grantId: payload.grantId,
     rank: analysis.tara_fit_rank,
     score: analysis.tara_fit_score,
+    updated: !!existingAnalysis,
   });
 }
 

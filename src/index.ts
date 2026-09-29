@@ -91,7 +91,7 @@ export default {
             await handleFetchDetail(env, payload as { grantId: number; jgrantsId: string });
             break;
           case "grant.analyze":
-            await handleAnalyze(env, payload as { grantId: number });
+            await handleAnalyze(env, payload as { grantId: number; force?: boolean });
             break;
           default:
             logEvent("warn", "queue.unknown_type", { type });

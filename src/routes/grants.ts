@@ -147,6 +147,48 @@ const app = new Hono<AppContextEnv>()
 
     const result = await ingestGrantList(c.env);
     return c.json(result);
+  })
+  // 一括再解析トリガー（ADMIN_SECRET必須）
+  .post("/reanalyze", async (c) => {
+    const secret = c.req.header("x-admin-secret");
+    if (!c.env.ADMIN_SECRET || secret !== c.env.ADMIN_SECRET) {
+      return jsonError(c, 401, "unauthorized", "Invalid admin secret");
+    }
+
+    const db = drizzle(c.env.DB);
+    const all = c.req.query("all") === "true";
+
+    const conditions = all
+      ? []
+      : [or(gte(grants.deadline, sql`date('now')`), isNull(grants.deadline))];
+
+    const targets = await db
+      .select({ id: grants.id })
+      .from(grants)
+      .where(and(...conditions));
+
+    const queueMessages = targets.map((g) => ({
+      type: "grant.analyze",
+      payload: { grantId: g.id, force: true },
+    }));
+
+    if (queueMessages.length > 0) {
+      const batches = [];
+      for (let i = 0; i < queueMessages.length; i += 100) {
+        batches.push(queueMessages.slice(i, i + 100));
+      }
+      for (const batch of batches) {
+        await c.env.JOBS.sendBatch(
+          batch.map((msg) => ({ body: msg }))
+        );
+      }
+    }
+
+    return c.json({
+      success: true,
+      queued: queueMessages.length,
+      all,
+    });
   });
 
 export default app;
