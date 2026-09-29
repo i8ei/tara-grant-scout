@@ -88,36 +88,40 @@ describe("analysisSchema", () => {
   });
 });
 
-describe("analyzeGrant with Workers AI", () => {
-  it("should call Workers AI binding and return parsed result", async () => {
-    const mockJson = {
-      summary_short: "【対象】太良町農家 【使途】スマート農業 【補助】上限300万円 【アクション】JA経由申請",
+describe("analyzeGrant with Jev + Workers AI two-stage pipeline", () => {
+  it("should process viable grant through Jev and Stage 2 Workers AI", async () => {
+    const mockJev = {
+      answers: {
+        is_realistic: { noul: 0.88 },
+        applicant_type: { choice: "business", confidence: 0.95 },
+        department: { choice: "norin", confidence: 0.98 },
+        category: { choice: "nou", confidence: 0.92 },
+        scale_suitability: { score: 2.8, confidence: 0.9 },
+      },
+    };
+
+    const mockStage2 = {
+      summary_short: "【誰が】太良町のみかん・園芸農家 【何に】省エネ機器導入 【補助】上限500万円（補助率2/3） 【アクション】締切までに農林水産課へ提出",
       support_type: "補助金",
-      target_entities: "農家",
-      max_amount: "300万円",
-      subsidy_rate: "1/2",
-      eligible_themes: "農業",
-      required_documents: null,
+      target_entities: "町内みかん農家",
+      max_amount: "500万円",
+      subsidy_rate: "2/3",
+      eligible_themes: "農業,省エネ",
+      required_documents: "申請書",
       notes: null,
-      ai_confidence: 85,
-      tara_fit_score: 80,
-      tara_fit_rank: "A",
-      tara_fit_reason: "みかん園の傾斜地での作業省力化に合致",
-      suggested_department: "農林水産課",
-      suggested_department_reason: "農業担当のため",
-      tara_use_case: "みかん園での散水自動化",
-      tara_categories: ["農業"],
+      tara_use_case: "傾斜地みかん園での作業負担軽減",
     };
 
     const mockAi: WorkersAiBinding = {
-      run: vi.fn().mockResolvedValue({
-        response: JSON.stringify(mockJson),
+      run: vi.fn().mockImplementation((model: string) => {
+        if (model === "typesafe/jev") {
+          return Promise.resolve(mockJev);
+        }
+        return Promise.resolve({ response: JSON.stringify(mockStage2) });
       }),
     };
 
-    const env: Partial<Env> = {
-      AI: mockAi,
-    };
+    const env: Partial<Env> = { AI: mockAi };
 
     const result = await analyzeGrant(
       {
@@ -130,10 +134,105 @@ describe("analyzeGrant with Workers AI", () => {
       env
     );
 
-    expect(mockAi.run).toHaveBeenCalledTimes(1);
+    expect(mockAi.run).toHaveBeenCalledTimes(2);
     expect(result).not.toBeNull();
     expect(result?.tara_fit_rank).toBe("A");
-    expect(result?.tara_fit_score).toBe(80);
-    expect(result?.summary_short).toContain("【対象】");
+    expect(result?.suggested_department).toBe("農林水産課");
+    expect(result?.summary_short).toContain("【誰が】");
+  });
+
+  it("should early-reject out-of-scale grant (Rank C) without calling Stage 2", async () => {
+    const mockJev = {
+      answers: {
+        is_realistic: { noul: 0.05 },
+        applicant_type: { choice: "town", confidence: 0.5 },
+        department: { choice: "kikaku", confidence: 0.6 },
+        category: { choice: "infra", confidence: 0.8 },
+        scale_suitability: { score: 0.2, confidence: 0.95 },
+      },
+    };
+
+    const mockAi: WorkersAiBinding = {
+      run: vi.fn().mockImplementation((model: string) => {
+        if (model === "typesafe/jev") {
+          return Promise.resolve(mockJev);
+        }
+        throw new Error("Stage 2 should not be called for early rejected grant");
+      }),
+    };
+
+    const env: Partial<Env> = { AI: mockAi };
+
+    const result = await analyzeGrant(
+      {
+        title: "ハイブリッド連節バス導入事業",
+        source_ministry: "環境省",
+        source_url: "https://example.com/grant/bus",
+        deadline: "2026-10-31",
+        raw_text: "連節バス購入費用の一部を補助...",
+      },
+      env
+    );
+
+    // Only Jev was called; Stage 2 was skipped!
+    expect(mockAi.run).toHaveBeenCalledTimes(1);
+    expect(result).not.toBeNull();
+    expect(result?.tara_fit_rank).toBe("C");
+    expect(result?.tara_fit_score).toBeLessThan(50);
+    expect(result?.summary_short).toContain("【対象外】");
+  });
+
+  it("should fallback to legacy single-stage LLM if Jev is unavailable", async () => {
+    const mockLegacy = {
+      summary_short: "【誰が】小規模事業者 【使途】販路開拓 【補助】上限200万円 【アクション】商工会相談",
+      support_type: "補助金",
+      target_entities: "小規模事業者",
+      max_amount: "200万円",
+      subsidy_rate: "2/3",
+      eligible_themes: "販路開拓",
+      required_documents: null,
+      notes: null,
+      ai_confidence: 80,
+      tara_fit_score: 75,
+      tara_fit_rank: "A",
+      tara_fit_reason: "町内事業者に適合",
+      suggested_department: "企画商工課",
+      suggested_department_reason: "商工振興のため",
+      tara_use_case: "商店街でのPR",
+      tara_categories: ["小規模事業者"],
+    };
+
+    const mockAi: WorkersAiBinding = {
+      run: vi.fn().mockImplementation((model: string) => {
+        if (model === "typesafe/jev") {
+          throw new Error("Jev not available in this environment");
+        }
+        return Promise.resolve({ response: JSON.stringify(mockLegacy) });
+      }),
+    };
+
+    // Temporarily clear TYPESAFE_API_KEY to test pure fallback
+    const origKey = process.env.TYPESAFE_API_KEY;
+    delete process.env.TYPESAFE_API_KEY;
+
+    try {
+      const result = await analyzeGrant(
+        {
+          title: "小規模持続化補助金",
+          source_ministry: "中小企業庁",
+          source_url: "https://example.com/grant/2",
+          deadline: "2026-10-31",
+          raw_text: "小規模事業者の販路開拓支援...",
+        },
+        { AI: mockAi }
+      );
+
+      expect(result).not.toBeNull();
+      expect(result?.tara_fit_rank).toBe("A");
+      expect(result?.suggested_department).toBe("企画商工課");
+    } finally {
+      if (origKey) process.env.TYPESAFE_API_KEY = origKey;
+    }
   });
 });
+

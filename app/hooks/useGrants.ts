@@ -17,6 +17,7 @@ export type GrantSummary = {
   taraFitRank: string | null;
   taraFitScore: number | null;
   maxAmount: string | null;
+  targetEntities: string | null;
   suggestedDepartment: string | null;
   taraCategories: string | null;
 };

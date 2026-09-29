@@ -123,10 +123,10 @@ export function GrantDetailPage() {
         </div>
       </div>
 
-      {/* AI Summary */}
+      {/* Summary */}
       {a?.summaryShort && (
-        <div className="rounded-xl border border-indigo-300 bg-indigo-50 p-4 shadow-sm sm:p-5">
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-indigo-700">AI要約</h3>
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 shadow-sm sm:p-5">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-indigo-700">要点サマリー（応募判断用）</h3>
           <p className="text-sm font-medium leading-relaxed text-gray-800">{a.summaryShort}</p>
         </div>
       )}
@@ -142,22 +142,51 @@ export function GrantDetailPage() {
             <Field label="対象テーマ" value={a.eligibleThemes} />
             <Field label="必要書類" value={a.requiredDocuments} />
             <Field label="備考" value={a.notes} />
-            {a.aiConfidence != null && (
-              <Field label="AI確度" value={`${a.aiConfidence}%`} />
+          </dl>
+        </Section>
+      )}
+
+      {/* Tara fit + Department */}
+      {(a?.taraFitReason || a?.suggestedDepartment) && (
+        <Section title="太良町との適合理由・担当課">
+          <dl className="divide-y divide-gray-200">
+            {a.suggestedDepartment && (
+              <div className="py-2.5">
+                <dt className="text-xs font-semibold text-gray-500">役場担当窓口（目安）</dt>
+                <dd className="mt-1 flex flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-bold text-indigo-700 border border-indigo-200">
+                    {a.suggestedDepartment}
+                  </span>
+                  {a.suggestedDepartmentReason && (
+                    <span className="text-xs text-gray-600">（{a.suggestedDepartmentReason}）</span>
+                  )}
+                </dd>
+              </div>
+            )}
+            {a.taraCategories && (
+              <div className="py-2.5">
+                <dt className="text-xs font-semibold text-gray-500">該当分野</dt>
+                <dd className="mt-1 flex flex-wrap gap-1.5">
+                  {a.taraCategories.split(",").map((c) => (
+                    <span key={c} className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                      {c.trim()}
+                    </span>
+                  ))}
+                </dd>
+              </div>
+            )}
+            {a.taraFitReason && (
+              <div className="py-2.5">
+                <dt className="text-xs font-semibold text-gray-500">適合理由</dt>
+                <dd className="mt-1 text-sm leading-relaxed text-gray-800">{a.taraFitReason}</dd>
+              </div>
             )}
           </dl>
         </Section>
       )}
 
-      {/* Tara fit + Department + Use case — 2-col on desktop */}
-      {a?.taraFitReason && (
-        <Section title="太良町との相性">
-          <p className="text-sm leading-relaxed text-gray-800">{a.taraFitReason}</p>
-        </Section>
-      )}
-
       {a?.taraUseCase && (
-        <Section title="太良町での活用仮説">
+        <Section title="太良町での活用アイデア">
           <p className="text-sm leading-relaxed text-gray-800">{a.taraUseCase}</p>
         </Section>
       )}

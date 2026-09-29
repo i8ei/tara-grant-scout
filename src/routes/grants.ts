@@ -79,6 +79,7 @@ const app = new Hono<AppContextEnv>()
         taraFitScore: grantAiAnalyses.taraFitScore,
         suggestedDepartment: grantAiAnalyses.suggestedDepartment,
         maxAmount: grantAiAnalyses.maxAmount,
+        targetEntities: grantAiAnalyses.targetEntities,
         taraCategories: grantAiAnalyses.taraCategories,
       })
       .from(grants)

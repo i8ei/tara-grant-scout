@@ -17,6 +17,7 @@ export interface Env {
   // 外部LLMはフォールバック用（主モデルは Workers AI）
   KIMI_API_KEY?: string;
   OPENAI_API_KEY?: string;
+  TYPESAFE_API_KEY?: string;
   ADMIN_SECRET: string;
 }
 

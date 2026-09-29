@@ -274,6 +274,20 @@ export function GrantListPage() {
                     </p>
                     <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
                       <span className="font-medium">{g.sourceMinistry}</span>
+                      {g.suggestedDepartment && (
+                        <>
+                          <span className="text-gray-300">·</span>
+                          <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">{g.suggestedDepartment}</span>
+                        </>
+                      )}
+                      {g.targetEntities && (
+                        <>
+                          <span className="text-gray-300">·</span>
+                          <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                            {g.targetEntities.includes("民間") ? "民間事業者" : g.targetEntities.includes("役場") ? "役場向け" : g.targetEntities.slice(0, 10)}
+                          </span>
+                        </>
+                      )}
                       {g.maxAmount && (
                         <>
                           <span className="text-gray-300">·</span>
