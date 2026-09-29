@@ -37,8 +37,8 @@
     ]
   },
   "vars": {
-    "CORS_ORIGIN": "http://localhost:5173",
-    "APP_BASE_URL": "http://localhost:5173"
+    "CORS_ORIGIN": "http://localhost:5173,https://tara-grant-scout.ichevi.workers.dev",
+    "APP_BASE_URL": "https://tara-grant-scout.ichevi.workers.dev"
   },
   // Static assets (React SPA)
   "assets": {
