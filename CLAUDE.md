@@ -2,93 +2,85 @@
 
 ## プロジェクト概要
 
-太良町（佐賀県）向けの補助金AIスカウトシステム。jGrants APIで全省庁の補助金を毎日自動収集し、Kimi K2.5で太良町への適合度を評価する。Cloudflare完結（Workers + D1 + Queues + Cron Triggers）。
+太良町（佐賀県）向けの補助金AIスカウトシステム。国（jGrants API）および佐賀県産業イノベーションセンターの公募情報を毎日自動収集し、太良町目線でAIが適合度を4段階評価（S/A/B/C）し、要約と使い道を即答する。Cloudflare完結（Workers + D1 + Queues + Workers AI + Cron Triggers）。
 
 本番: https://tara-grant-scout.ichevi.workers.dev
 
 ## 技術スタック
 
-- cf-starter テンプレートベース（認証・org・RBAC は全削除済み）
-- React + Tailwind v4 + TanStack Query / Hono / D1 + Drizzle
-- Cloudflare Queues（非同期ジョブ）+ Cron Triggers（定期実行）
-- AI: Kimi K2.5 (Moonshot AI) primary / GPT-4o-mini fallback
+- **Frontend**: React 19 + TypeScript + Tailwind CSS v4 + TanStack Query + Wouter
+- **Backend**: Hono v4 on Cloudflare Workers
+- **Database**: Cloudflare D1 (SQLite) + Drizzle ORM
+- **非同期・定期実行**: Cloudflare Queues + Cron Triggers (0 21 * * * = JST 6:00)
+- **AI パイプライン**:
+  - 第1段階: TypeSafe Jev (System One) による決定論的適格性・早期足切り
+  - 第2段階: Cloudflare Workers AI (`@cf/qwen/qwen3.8-27b`, Llama 3.3 70B 等) による構造化サマリー生成
+  - 相談窓口: Cloudflare Workers AI (`@cf/meta/llama-3.1-8b-instruct-fp8`) によるエッジ即時回答
+  - （フォールバック: OpenAI gpt-4o-mini）
 
 ## 開発コマンド
 
 ```bash
-npm run dev              # ローカル開発サーバー
-npm run build            # ビルド
-npm run deploy           # ビルド + デプロイ
+npm run dev              # ローカル開発サーバー (Vite + Cloudflare)
+npm run build            # クライアント & Worker ビルド
+npm run deploy           # ビルド + Cloudflare Workers 本番デプロイ
+npm test                 # Vitest ユニットテスト実行
 npm run db:migrate       # D1マイグレーション（ローカル）
 npm run db:migrate:remote # D1マイグレーション（リモート）
-npm run ingest           # ローカルCLIで補助金取り込み（レガシー）
 ```
 
 ## 自動 ingest パイプライン（本番）
 
 ```
 Cron (0 21 * * * = JST 6:00)
-  → ingestGrantList(): jGrants API一覧取得 → D1保存 → Queue投入
-  → grant.fetch_detail: 詳細取得 → raw_text・省庁名をD1更新
-  → grant.analyze: AI解析（Kimi→GPT-4o-mini fallback）→ Zodバリデーション → D1保存
+  → ingestGrantList():
+      ├─ jGrants API (国の公募)
+      └─ sagaperch-source.ts (佐賀県産業イノベーションセンターの独自公募)
+      → D1 grants テーブルに新規保存 (ON CONFLICT DO NOTHING)
+  → Queue:
+      ├─ grant.fetch_detail (jGrants用: 詳細HTMLから本文と省庁名を補完)
+      └─ grant.analyze (Jev + Workers AI による適合度評価・構造化サマリー)
 ```
 
-手動トリガー: `POST /api/grants/ingest`（x-admin-secret ヘッダ必須）
+手動トリガー:
+- `POST /api/grants/ingest` (ヘッダ: `x-admin-secret`)
+- `POST /api/grants/reanalyze` (ヘッダ: `x-admin-secret`, クエリ: `all=true` で全件)
 
 ## DB構造
 
 ### grants テーブル
-- id, title, source_ministry, source_url, published_at, deadline, raw_text, category_raw
+- `id`, `title`, `source_ministry`, `source_url`, `published_at`, `deadline`, `raw_text`, `category_raw`
 
 ### grant_ai_analyses テーブル
-- grant_id (FK → grants.id)
-- summary_short, support_type, target_entities, max_amount, subsidy_rate
-- eligible_themes, required_documents, notes
-- ai_confidence, tara_fit_rank (A/B/C), tara_fit_score (0-100)
-- tara_fit_reason, suggested_department, suggested_department_reason, tara_use_case
-- tara_categories（カンマ区切り: 農業,漁業,林業,旅館・観光 等）
+- `grant_id` (FK → grants.id)
+- `summary_short` (【誰が】【何に】【補助】【アクション】形式の構造化サマリー)
+- `support_type`, `target_entities`, `max_amount`, `subsidy_rate`
+- `eligible_themes`, `required_documents`, `notes`
+- `ai_confidence`, `tara_fit_rank` (S / A / B / C), `tara_fit_score` (0〜100点)
+- `tara_fit_reason`, `suggested_department`, `suggested_department_reason`, `tara_use_case`
+- `tara_categories` (カンマ区切り: 福祉・医療, 農業, 漁業, 旅館・観光, 小規模事業者 等)
+
+## ランク基準
+
+- **S (80点以上)**: 【超特選】太良町の基幹産業（みかん・カキ・ノリ・旅館等）に直結する重要制度
+- **A (60〜79点)**: 【積極推奨】町内事業者の本命制度（エイジフレンドリー、佐賀県中小企業生産性向上、働き方改革等）
+- **B (45〜59点)**: 【条件付き】共同申請や特定要件を満たせば活用可能
+- **C (44点以下)**: 太良町には不適・対象外（非現実的案件を自動排除、デフォルト一覧から除外）
 
 ## API エンドポイント
 
 | エンドポイント | 内容 |
 |---|---|
-| `GET /api/grants` | 一覧（フィルタ: rank, category, q, include_ended） |
-| `GET /api/grants/status` | ステータス（件数・最終更新） |
-| `GET /api/grants/:id` | 詳細 + AI解析 |
-| `POST /api/grants/ingest` | 手動ingest（要 x-admin-secret） |
+| `GET /api/grants` | 一覧（フィルタ: `rank`, `category`, `q`, `include_ended`） |
+| `GET /api/grants/status` | ステータス（収集件数・解析件数・最終Cron日時） |
+| `GET /api/grants/:id` | 詳細 + AI解析結果 |
+| `POST /api/grants/:id/check` | AIクイック相談（ボディ: `{ question: string }`） |
+| `POST /api/grants/ingest` | 手動ingest（要 `x-admin-secret`） |
+| `POST /api/grants/reanalyze` | 一括再解析（要 `x-admin-secret`） |
 
-デフォルトでCランク除外、締切済み除外（include_ended=trueで過去90日分表示）。
+## コード規約と設計上の注意点
 
-## ディレクトリ構成
-
-- `app/` — React SPA（pages/grants/, hooks/, components/）
-- `src/` — Worker backend
-  - `src/features/grants/` — ingestパイプライン（TS移植版）
-  - `src/routes/grants.ts` — API
-  - `src/index.ts` — Worker entry（fetch + scheduled + queue）
-- `scripts/` — ローカルCLI（レガシー、引き続き使用可）
-- `migrations/` — D1マイグレーション
-
-## jGrants API の注意点
-
-- パラメータはフラットなクエリパラメータ（OpenAPI仕様のオブジェクト型ではない）
-- `keyword`, `acceptance`, `sort`, `order` の4つが必須
-- 省庁名はAPIに専用フィールドがない → v2詳細HTMLから抽出（62%ヒット）
-
-## AI 解析の注意点
-
-- Kimi K2.5 primary → GPT-4o-mini fallback（Kimi失敗時に自動切替）
-- `thinking: { type: "disabled" }` でInstant Mode
-- reasoning_contentフォールバック + ブレース対応JSONパーサーで安定抽出
-- AI出力はZodスキーマでバリデーション（不正な型・範囲はデフォルト値にフォールバック）
-- 外部API呼び出しにAbortSignal.timeout設定（jGrants: 15s, LLM: 30s）
-- Queue handlerはON CONFLICT DO NOTHINGで冪等（at-least-once配信に対応）
-- `.dev.vars` に `KIMI_API_KEY`, `OPENAI_API_KEY`, `ADMIN_SECRET` を設定
-
-## シークレット
-
-```bash
-wrangler secret put KIMI_API_KEY
-wrangler secret put OPENAI_API_KEY   # GPT-4o-mini fallback（任意）
-wrangler secret put ADMIN_SECRET
-```
+- **ゼロ内部用語原則**: 画面およびAI出力文には「Jev」「Workers AI」「確度」などの内部システム名を絶対に出さない。町民・事業者が読んで自然な日本語で統一する。
+- **軽量エッジ推論**: `POST /api/grants/:id/check` には高速応答可能な `@cf/meta/llama-3.1-8b-instruct-fp8` を優先採用し、1〜2秒以内のレスポンスを維持する。
+- **CSRF & CORS**: SPA同一オリジン（`new URL(c.req.url).origin`）および `wrangler.jsonc` の `CORS_ORIGIN` に設定されたオリジンからの安全な通信を許可する。
+- **安全なJSONパース**: AI出力パースには `parseJsonFromText` を使用し、マークダウンコードブロックや余分なテキストが含まれていても安定してJSONオブジェクトを抽出する。
