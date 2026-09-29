@@ -5,6 +5,7 @@ import { grants, grantAiAnalyses, systemMeta } from "../db/schema";
 import type { AppContextEnv } from "../types";
 import { jsonError } from "../lib/http";
 import { ingestGrantList } from "../features/grants/ingest";
+import { checkGrantEligibility } from "../features/grants/eligibility-checker";
 
 const app = new Hono<AppContextEnv>()
   // LIST with SQL-level filters
@@ -137,6 +138,54 @@ const app = new Hono<AppContextEnv>()
       .where(eq(grantAiAnalyses.grantId, id));
 
     return c.json({ ...grant, analysis: analysis ?? null });
+  })
+  // ユーザー相談：この補助金うちで使える？判定API
+  .post("/:id/check", async (c) => {
+    const db = drizzle(c.env.DB);
+    const id = Number(c.req.param("id"));
+
+    const [grant] = await db
+      .select()
+      .from(grants)
+      .where(eq(grants.id, id));
+
+    if (!grant) {
+      return jsonError(c, 404, "not_found", "Grant not found");
+    }
+
+    const [analysis] = await db
+      .select()
+      .from(grantAiAnalyses)
+      .where(eq(grantAiAnalyses.grantId, id));
+
+    let body: { question?: string } = {};
+    try {
+      body = await c.req.json();
+    } catch {
+      // empty
+    }
+
+    const question = body.question?.trim();
+    if (!question) {
+      return jsonError(c, 400, "bad_request", "相談内容を入力してください");
+    }
+
+    const result = await checkGrantEligibility(
+      {
+        grantTitle: grant.title,
+        sourceMinistry: grant.sourceMinistry,
+        targetEntities: analysis?.targetEntities,
+        eligibleThemes: analysis?.eligibleThemes,
+        summaryShort: analysis?.summaryShort,
+        taraUseCase: analysis?.taraUseCase,
+        notes: analysis?.notes,
+        rawText: grant.rawText,
+        question,
+      },
+      c.env
+    );
+
+    return c.json(result);
   })
   // 手動ingestトリガー（ADMIN_SECRET必須）
   .post("/ingest", async (c) => {

@@ -3,17 +3,30 @@ import { Link, useSearchParams } from "wouter";
 import { useGrants } from "../../hooks/useGrants";
 
 const CATEGORIES = [
-  { key: "農業", label: "農業" },
-  { key: "漁業", label: "漁業" },
-  { key: "林業", label: "林業" },
-  { key: "旅館・観光", label: "旅館・観光" },
-  { key: "小規模事業者", label: "小規模事業者" },
-  { key: "インフラ・建設", label: "インフラ・建設" },
-  { key: "福祉・医療", label: "福祉・医療" },
-  { key: "環境・エネルギー", label: "環境・エネルギー" },
-  { key: "デジタル・IT", label: "デジタル・IT" },
-  { key: "地域振興", label: "地域振興" },
+  { key: "福祉・医療", label: "福祉・介護・医療", icon: "👵" },
+  { key: "農業", label: "みかん・農業", icon: "🍊" },
+  { key: "漁業", label: "カニ・海苔・水産", icon: "🦀" },
+  { key: "旅館・観光", label: "温泉旅館・観光", icon: "♨️" },
+  { key: "小規模事業者", label: "商店・飲食・小規模", icon: "🏪" },
+  { key: "インフラ・建設", label: "建設・土木・工事", icon: "🏗️" },
+  { key: "林業", label: "林業・木材", icon: "🌲" },
+  { key: "デジタル・IT", label: "IT・DX化", icon: "💻" },
+  { key: "環境・エネルギー", label: "環境・再エネ", icon: "🌱" },
+  { key: "地域振興", label: "役場・地域振興", icon: "🏛️" },
 ];
+
+const CATEGORY_ICON_MAP: Record<string, string> = {
+  "福祉・医療": "👵",
+  "農業": "🍊",
+  "漁業": "🦀",
+  "旅館・観光": "♨️",
+  "小規模事業者": "🏪",
+  "インフラ・建設": "🏗️",
+  "林業": "🌲",
+  "デジタル・IT": "💻",
+  "環境・エネルギー": "🌱",
+  "地域振興": "🏛️",
+};
 
 function rankBadge(rank: string | null) {
   switch (rank) {
@@ -143,22 +156,36 @@ export function GrantListPage() {
       </div>
 
       {/* Category filters */}
-      <div className="flex flex-wrap gap-1.5 sm:gap-2">
-        <button
-          onClick={() => setFilter("category", "")}
-          className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${!category ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-300 hover:bg-gray-50 hover:text-gray-900"}`}
-        >
-          すべて
-        </button>
-        {CATEGORIES.map((cat) => (
+      <div className="space-y-2 rounded-xl bg-gray-50/80 p-3 border border-gray-200/80">
+        <div className="flex items-center justify-between text-xs text-gray-600 font-medium px-1">
+          <span>あなたの業種・立場から探す:</span>
+          {category && (
+            <button
+              onClick={() => setFilter("category", "")}
+              className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+            >
+              ✕ 条件を解除
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1.5 sm:gap-2">
           <button
-            key={cat.key}
-            onClick={() => setFilter("category", category === cat.key ? "" : cat.key)}
-            className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${category === cat.key ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-300 hover:bg-gray-50 hover:text-gray-900"}`}
+            onClick={() => setFilter("category", "")}
+            className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${!category ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-gray-600 border border-gray-300 hover:bg-gray-100 hover:text-gray-900"}`}
           >
-            {cat.label}
+            全業種
           </button>
-        ))}
+          {CATEGORIES.map((cat) => (
+            <button
+              key={cat.key}
+              onClick={() => setFilter("category", category === cat.key ? "" : cat.key)}
+              className={`cursor-pointer rounded-full px-3 py-1.5 text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 ${category === cat.key ? "bg-indigo-600 text-white shadow-sm" : "bg-white text-gray-700 border border-gray-300 hover:bg-gray-100 hover:text-gray-900"}`}
+            >
+              <span aria-hidden="true">{cat.icon}</span>
+              <span>{cat.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Search & sort */}
@@ -291,6 +318,21 @@ export function GrantListPage() {
                           <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
                             {g.targetEntities.includes("民間") ? "民間事業者" : g.targetEntities.includes("役場") ? "役場向け" : g.targetEntities.slice(0, 10)}
                           </span>
+                        </>
+                      )}
+                      {g.taraCategories && (
+                        <>
+                          <span className="text-gray-300">·</span>
+                          {g.taraCategories.split(",").slice(0, 2).map((c) => {
+                            const trimmed = c.trim();
+                            const icon = CATEGORY_ICON_MAP[trimmed] || "🏷️";
+                            return (
+                              <span key={trimmed} className="inline-flex items-center gap-0.5 rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700">
+                                <span aria-hidden="true">{icon}</span>
+                                <span>{trimmed}</span>
+                              </span>
+                            );
+                          })}
                         </>
                       )}
                       {g.maxAmount && (

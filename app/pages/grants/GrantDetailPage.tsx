@@ -59,11 +59,57 @@ function SkeletonDetail() {
   );
 }
 
+interface CheckResult {
+  status: "likely" | "conditional" | "unlikely";
+  headline: string;
+  answer: string;
+  advice: string;
+}
+
+const QUICK_QUESTIONS = [
+  "福祉施設・介護事業所で使える？",
+  "車の購入や買い替えに使える？",
+  "パソコンやタブレット端末は対象？",
+  "チラシやホームページの作成は？",
+  "店舗や作業場の改修工事はできる？",
+];
+
 export function GrantDetailPage() {
   const { id: idParam } = useParams<{ id: string }>();
   const id = Number(idParam);
   const { data, isLoading } = useGrant(id);
   const [showRaw, setShowRaw] = useState(false);
+
+  const [questionInput, setQuestionInput] = useState("");
+  const [isChecking, setIsChecking] = useState(false);
+  const [checkResult, setCheckResult] = useState<CheckResult | null>(null);
+  const [checkError, setCheckError] = useState<string | null>(null);
+
+  const handleCheck = async (questionText?: string) => {
+    const q = (questionText ?? questionInput).trim();
+    if (!q) return;
+    if (questionText) {
+      setQuestionInput(questionText);
+    }
+    setIsChecking(true);
+    setCheckError(null);
+    try {
+      const res = await fetch(`/api/grants/${id}/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: q }),
+      });
+      if (!res.ok) {
+        throw new Error("判定の取得に失敗しました");
+      }
+      const json: CheckResult = await res.json();
+      setCheckResult(json);
+    } catch (err) {
+      setCheckError(err instanceof Error ? err.message : "判定中にエラーが発生しました");
+    } finally {
+      setIsChecking(false);
+    }
+  };
 
   if (isLoading) {
     return <SkeletonDetail />;
@@ -130,6 +176,165 @@ export function GrantDetailPage() {
         <div className="rounded-xl border border-indigo-200 bg-indigo-50/70 p-4 shadow-sm sm:p-5">
           <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-indigo-700">要点サマリー（応募判断用）</h3>
           <p className="text-sm font-medium leading-relaxed text-gray-800">{a.summaryShort}</p>
+        </div>
+      )}
+
+      {/* 🤖 AI 1秒判定ウィジェット */}
+      <div className="rounded-xl border-2 border-indigo-300 bg-white p-4 shadow-md sm:p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <span className="text-xl">🤖</span>
+          <div>
+            <h3 className="text-sm font-bold text-gray-900">この補助金、うちで使える？（AIクイック相談）</h3>
+            <p className="text-xs text-gray-500">あなたの業種や買いたいものを入力すると、AIが公募要領をもとに判定します</p>
+          </div>
+        </div>
+
+        {/* クイック質問サジェスト */}
+        <div className="flex flex-wrap gap-1.5">
+          {QUICK_QUESTIONS.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => handleCheck(q)}
+              disabled={isChecking}
+              className="cursor-pointer rounded-full border border-indigo-200 bg-indigo-50/60 px-2.5 py-1 text-xs text-indigo-700 transition-colors hover:bg-indigo-100 hover:border-indigo-300 disabled:opacity-50"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+
+        {/* 自由入力フォーム */}
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleCheck();
+          }}
+          className="flex gap-2"
+        >
+          <input
+            type="text"
+            value={questionInput}
+            onChange={(e) => setQuestionInput(e.target.value)}
+            placeholder="例: デイサービスですが送迎車の買い替えに使えますか？"
+            className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          />
+          <button
+            type="submit"
+            disabled={isChecking || !questionInput.trim()}
+            className="cursor-pointer shrink-0 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-xs transition-all hover:bg-indigo-500 active:scale-95 disabled:opacity-50"
+          >
+            {isChecking ? "判定中..." : "判定する"}
+          </button>
+        </form>
+
+        {/* エラー表示 */}
+        {checkError && (
+          <p className="text-xs text-rose-600">{checkError}</p>
+        )}
+
+        {/* 判定結果カード */}
+        {checkResult && (
+          <div
+            className={`rounded-lg border p-4 space-y-2.5 transition-all ${
+              checkResult.status === "likely"
+                ? "border-emerald-300 bg-emerald-50/80"
+                : checkResult.status === "conditional"
+                ? "border-amber-300 bg-amber-50/80"
+                : "border-rose-300 bg-rose-50/80"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold ${
+                  checkResult.status === "likely"
+                    ? "bg-emerald-600 text-white"
+                    : checkResult.status === "conditional"
+                    ? "bg-amber-600 text-white"
+                    : "bg-rose-600 text-white"
+                }`}
+              >
+                {checkResult.status === "likely"
+                  ? "⭕️ 使える可能性大"
+                  : checkResult.status === "conditional"
+                  ? "⚠️ 条件付きで可能"
+                  : "❌ 原則対象外"}
+              </span>
+              <span className="text-sm font-bold text-gray-900">{checkResult.headline}</span>
+            </div>
+
+            <p className="text-xs leading-relaxed text-gray-800">{checkResult.answer}</p>
+
+            {checkResult.advice && (
+              <div className="rounded border border-black/5 bg-white/70 p-2 text-xs text-gray-700">
+                <span className="font-bold text-gray-900">💡 アドバイス: </span>
+                {checkResult.advice}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ひと目でわかる適用診断 */}
+      {a && (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {/* こんな方・事業者向け */}
+          <div className="rounded-xl border border-gray-300 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+              <span>🎯</span>
+              <span>こんな方・事業者向け</span>
+            </div>
+            <p className="text-sm font-semibold text-gray-900">{a.targetEntities || "中小企業・小規模事業者全般"}</p>
+            {a.taraCategories && (
+              <div className="mt-2.5 flex flex-wrap gap-1">
+                {a.taraCategories.split(",").map((c) => (
+                  <span key={c} className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                    {c.trim()}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 補助上限と補助率 */}
+          <div className="rounded-xl border border-gray-300 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+              <span>💰</span>
+              <span>補助額と補助率</span>
+            </div>
+            <div className="space-y-1">
+              <div>
+                <span className="text-xs text-gray-500">補助上限: </span>
+                <span className="text-base font-bold text-emerald-700">{a.maxAmount || "公募要領参照"}</span>
+              </div>
+              <div>
+                <span className="text-xs text-gray-500">補助率: </span>
+                <span className="text-sm font-semibold text-gray-800">{a.subsidyRate || "要件による"}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* どんな使い道に使えるか */}
+          {a.eligibleThemes && (
+            <div className="rounded-xl border border-gray-300 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+                <span>💡</span>
+                <span>対象となる投資・使い道</span>
+              </div>
+              <p className="text-xs leading-relaxed text-gray-800">{a.eligibleThemes}</p>
+            </div>
+          )}
+
+          {/* 必要書類・準備目安 */}
+          {a.requiredDocuments && (
+            <div className="rounded-xl border border-gray-300 bg-white p-4 shadow-sm">
+              <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+                <span>📋</span>
+                <span>申請に必要な主な書類</span>
+              </div>
+              <p className="text-xs leading-relaxed text-gray-800">{a.requiredDocuments}</p>
+            </div>
+          )}
         </div>
       )}
 
